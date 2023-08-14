@@ -11,5 +11,5 @@ Download the `.vsix` file from the [releases page](https://github.com/ZolibraBon
 ### Install script
 Run this command in your terminal:
 ```bash
-curl -LO https://github.com/ZolibraBond/metaconfig-vscode/releases/download/latest/metaconfig.vsix && code --install-extension ./metaconfig.vsix
+curl -s https://api.github.com/repos/ZolibraBond/metaconfig-vscode/releases/latest | grep "browser_download_url" | cut -d : -f 2,3 | tr -d \" | wget -qi - && code --install-extension ./metaconfig.vsix
 ```
