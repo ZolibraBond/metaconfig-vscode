@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - trunk
+  release:
+    types: [created]
 
 jobs:
   build:
