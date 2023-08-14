@@ -19,7 +19,7 @@ jobs:
         node-version: '14'  # or another version if you prefer
 
     - name: Install dependencies
-      run: npm ci
+      run: npm install
 
     - name: Package VSCode Extension
       run: npx vsce package
