@@ -1,0 +1,51 @@
+{
+  "name": "Metaconfig",
+  "patterns": [
+    {
+      "name": "keyword.control.import.metaconfig",
+      "match": "^!(.+)$"
+    },
+    {
+      "name": "invalid.deprecated.metaconfig",
+      "match": "^-(.+)$"
+    },
+    {
+      "name": "comment.line.number-sign.metaconfig",
+      "match": "^#.*$"
+    },
+    { "include": "#number" },
+    { "include": "#boolean" },
+    { "include": "#string" },
+    {
+      "name": "string.unquoted.metaconfig",
+      "match": "^(?![-!#])[^=]+(?==)"
+    }
+  ],
+  "repository": {
+    "number": {
+      "patterns": [
+        {
+          "name": "constant.numeric",
+          "match": "(?<=^.*=)([0-9]+)"
+        }
+      ]
+    },
+    "boolean": {
+      "patterns": [
+        {
+          "name": "constant.language",
+          "match": "(?<=^.*=)([yYnN])\\b"
+        }
+      ]
+    },
+    "string": {
+      "patterns": [
+        {
+          "name": "string.quoted",
+          "match": "(?<=^.*=)(\".*?\")"
+        }
+      ]
+    }
+  },
+  "scopeName": "source.metaconfig"
+}

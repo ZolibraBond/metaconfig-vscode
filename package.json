@@ -1,0 +1,87 @@
+{
+  "name": "metaconfig-extension",
+  "displayName": "Metaconfig",
+  "description": "Syntax highlighting and functionality for metaconfig files",
+  "version": "0.0.1",
+  "publisher": "bondhome",
+  "engines": {
+    "vscode": "^1.59.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:metaconfig"
+  ],
+  "main": "./extension",
+  "contributes": {
+    "languages": [
+      {
+        "id": "metaconfig",
+        "filenames": [
+          "metaconfig"
+        ],
+        "extensions": [
+          ".metaconfig",
+          "metaconfig"
+        ]
+      }
+    ],
+    "grammars": [
+      {
+        "language": "metaconfig",
+        "scopeName": "source.metaconfig",
+        "path": "./syntaxes/metaconfig.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "Metaconfig configuration",
+      "properties": {}
+    },
+    "colors": [
+      {
+        "id": "keyword.control.import.metaconfig",
+        "description": "Color for metaconfig import statements",
+        "defaults": {
+          "dark": "#4EC9B0",
+          "light": "#004880",
+          "highContrast": "#00f"
+        }
+      },
+      {
+        "id": "metaconfig.exclude",
+        "description": "Color for metaconfig exclusion statements",
+        "defaults": {
+          "dark": "#ff0000",
+          "light": "#880000",
+          "highContrast": "#f00"
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "postinstall": "node ./node_modules/vscode/bin/install"
+  },
+  "devDependencies": {
+    "typescript": "^4.3.5",
+    "vscode": "^1.1.37",
+    "tslint": "^5.20.1",
+    "@types/node": "^16.7.10",
+    "@types/mocha": "^8.2.3"
+  },
+  "dependencies": {},
+  "keywords": [
+    "metaconfig",
+    "vscode-extension"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ZolibraBond/metaconfig-extension"
+  },
+  "icon": "images/icon.png"
+}
