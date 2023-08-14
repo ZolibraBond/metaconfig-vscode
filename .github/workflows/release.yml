@@ -22,7 +22,7 @@ jobs:
       run: npm install
 
     - name: Package VSCode Extension
-      run: npx vsce package
+      run: npx vsce package -o metaconfig-extension.vsix
 
     - name: Upload VSIX as artifact
       uses: actions/upload-artifact@v2
