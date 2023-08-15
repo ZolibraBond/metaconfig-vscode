@@ -24,7 +24,8 @@
         "extensions": [
           ".metaconfig",
           "metaconfig"
-        ]
+        ],
+        "configuration": "./language-configuration.json"
       }
     ],
     "grammars": [
