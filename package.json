@@ -2,7 +2,7 @@
   "name": "metaconfig-extension",
   "displayName": "Metaconfig",
   "description": "Syntax highlighting and functionality for metaconfig files",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "bondhome",
   "engines": {
     "vscode": "^1.59.0"

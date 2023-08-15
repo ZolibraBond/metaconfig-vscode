@@ -44,11 +44,34 @@ const vscode = require('vscode');
 const path = require('path');
 const fs = require('fs');
 
+class MetaLine {
+	constructor(filename, lineNumber, importOrder, type, key, value) {
+		this.filename = filename;
+		this.lineNumber = lineNumber;
+		this.importOrder = importOrder
+		this.type = type; // "inclusion" or "exclusion"
+		this.key = key; // everything before "=", excluding "-" "!" or "#"
+		this.value = value; // everything after "=" (may be empty)
+	}
+
+	static fromLine(filename, lineNumber, importOrder, line) {
+		const type = line.startsWith('-') ? 'exclusion' : 'inclusion';
+		const key = line.match(/^[#!-]?(.+?)(?:=.*)?$/)[1];
+		const value = line.includes('=') ? line.substring(line.indexOf('=') + 1) : '';
+		return new MetaLine(filename, lineNumber, importOrder, type, key, value);
+	}
+}
+
 
 function activate(context) {
-	vscode.workspace.onDidOpenTextDocument(checkForDuplicates, null, context.subscriptions);
-	vscode.workspace.onDidSaveTextDocument(checkForDuplicates, null, context.subscriptions);
-	vscode.workspace.onDidChangeTextDocument(event => checkForDuplicates(event.document), null, context.subscriptions);
+	vscode.workspace.onDidOpenTextDocument(checkForIssues, null, context.subscriptions);
+	vscode.workspace.onDidSaveTextDocument(checkForIssues, null, context.subscriptions);
+	vscode.workspace.onDidChangeTextDocument(event => checkForIssues(event.document), null, context.subscriptions);
+	vscode.window.onDidChangeActiveTextEditor(editor => {
+		if (editor) {
+			checkForIssues(editor.document);
+		}
+	});
 
 	let disposable = vscode.commands.registerTextEditorCommand('metaconfig.openImport', (textEditor, edit) => {
 		console.log('Opening import');
@@ -111,34 +134,51 @@ function activate(context) {
 	context.subscriptions.push(disposable);
 }
 
-async function parseMetaconfigFile(filePath) {
+async function parseMetaconfigFile(filePath, importOrder = 0) {
+	console.log('Parsing metaconfig file: ' + filePath);
 	const fileContent = await vscode.workspace.fs.readFile(vscode.Uri.file(filePath));
 	const lines = fileContent.toString().split('\n');
 
-	let allLines = [];
+	let allMetalines = [];
 
 	for (const line of lines) {
+		// Get line number from file
+		const lineNumber = lines.indexOf(line) + 1;
 		const trimmedLine = line.trim();
+		if (trimmedLine === '') continue;
 
-		if (trimmedLine.startsWith('!')) {
+		if (trimmedLine.startsWith('!')) { // this is an import line
+			const rootPath = vscode.workspace.workspaceFolders ? vscode.workspace.workspaceFolders[0].uri.fsPath : '';
 			const fileNameWithExtension = trimmedLine.substring(1) + '.metaconfig';
 			const fileNameWithoutExtension = trimmedLine.substring(1);
-			const importPathWithExtension = path.join(vscode.workspace.rootPath, 'metaconfig', fileNameWithExtension);
-			const importPathWithoutExtension = path.join(vscode.workspace.rootPath, 'metaconfig', fileNameWithoutExtension);
+			const importPathWithExtension = path.join(rootPath, 'metaconfig', fileNameWithExtension);
+			const importPathWithoutExtension = path.join(rootPath, 'metaconfig', fileNameWithoutExtension);
 
+			// Open the file and parse it, but remember which file those lines came from
 			if (await fileExists(importPathWithExtension)) {
-				allLines = allLines.concat(await parseMetaconfigFile(importPathWithExtension));
+				const importedLines = await parseMetaconfigFile(importPathWithExtension, importOrder + 1);
+				allMetalines = allMetalines.concat(importedLines);
 			} else if (await fileExists(importPathWithoutExtension)) {
-				allLines = allLines.concat(await parseMetaconfigFile(importPathWithoutExtension));
+				const importedLines = await parseMetaconfigFile(importPathWithoutExtension, importOrder + 1);
+				allMetalines = allMetalines.concat(importedLines);
 			} else {
 				// This might be an error because the imported file doesn't exist, but you can handle this as you see fit.
 			}
 		} else {
-			allLines.push(trimmedLine);
+			allMetalines.push(MetaLine.fromLine(filePath, lineNumber, importOrder, trimmedLine));
 		}
 	}
 
-	return allLines;
+	console.log('Returning metalines for file: ' + filePath);
+	return allMetalines;
+}
+
+function parseKeyFromLine(line) {
+	const matches = line.match(/^[#!-]?(.+?)(?:=.*)?$/);
+	if (matches && matches.length > 1) {
+		return matches[1];
+	}
+	return null;
 }
 
 async function fileExists(filePath) {
@@ -150,36 +190,84 @@ async function fileExists(filePath) {
 	}
 }
 
-function findDuplicates(lines) {
-	const uniqueLines = new Set();
-	const duplicates = [];
 
-	for (const line of lines) {
-		if (uniqueLines.has(line)) {
-			duplicates.push(line);
-		} else {
-			uniqueLines.add(line);
+function findIssues(document, metalines) {
+	const issues = [];
+	const key_tracker = {};
+
+	// Sort metalines first by importOrder (in descending order), then by lineNumber
+	metalines.sort((a, b) => {
+		if (a.importOrder !== b.importOrder) {
+			return b.importOrder - a.importOrder; // reversed order
 		}
+		return a.lineNumber - b.lineNumber;
+	});
+
+	for (const metaline of metalines) {
+		const filename = path.relative(path.dirname(document.fileName), metaline.filename);
+		const key = metaline.key;
+		const line_type = metaline.type;
+		const value = metaline.value;
+		const lineNumber = metaline.lineNumber;
+
+		if (!key_tracker[key]) {
+			key_tracker[key] = [];
+		}
+
+		const existing_entries = key_tracker[key];
+		const last_inclusion_entry = existing_entries.slice().reverse().find(entry => entry.type === 'inclusion');
+
+		if (last_inclusion_entry) {
+			const previous_value = last_inclusion_entry.value;
+			const previous_filename = last_inclusion_entry.filename;
+
+			// Check for redefinition without exclusion or unnecessary redefinition
+			if (line_type === 'inclusion') {
+				if (key_tracker[key].some(entry => entry.type === 'exclusion' && entry.filename === filename)) {
+					if (previous_value === value && existing_entries.slice().reverse().findIndex(entry => entry.type === 'exclusion') < existing_entries.slice().reverse().findIndex(entry => entry.type === 'inclusion')) {
+						issues.push({
+							error: "Unnecessary redefinition. Value on " + filename + ":" + lineNumber + " is the same as the excluded value.",
+							metaline: metaline
+						});
+					}
+				} else {
+					issues.push({
+						error: "Redefined without exclusion.\nOriginal value (on " + previous_filename + ":" + last_inclusion_entry.lineNumber + ")=" + previous_value + "\nRedefined value (on " + filename + ":" + lineNumber + ")=" + value + ".",
+						metaline: metaline
+					});
+				}
+			}
+		}
+
+		key_tracker[key].push({ type: line_type, value: value, filename: filename, lineNumber: lineNumber });
 	}
 
-	return [...new Set(duplicates)];
+	return issues;
 }
+
 
 const diagnosticsCollection = vscode.languages.createDiagnosticCollection('metaconfig');
 
-async function checkForDuplicates(document) {
+async function checkForIssues(document) {
 	if (document.languageId !== 'metaconfig') return;
+	console.log('Checking for issues');
 
-	const allLines = await parseMetaconfigFile(document.fileName);
-	const duplicateLines = findDuplicates(allLines);
+	console.log('Parsing metaconfig file: ' + document.fileName);
+	const allLines = await parseMetaconfigFile(document.fileName, 0);
+	console.log("allLines: " + JSON.stringify(allLines));
+	const issues = findIssues(document, allLines);
 
 	const diagnostics = [];
 	for (let i = 0; i < document.lineCount; i++) {
 		const line = document.lineAt(i);
-		if (duplicateLines.includes(line.text.trim())) {
+		const key = parseKeyFromLine(line.text.trim()) || line.text.trim();
+		console.log('Checking line: ' + key);
+		if (issues.some(issue => issue.metaline.filename === document.fileName && issue.metaline.key === key)) {
+			const relevant_issues = issues.filter(issue => issue.metaline.filename === document.fileName && issue.metaline.key === key);
 			const diagnostic = new vscode.Diagnostic(
 				line.range,
-				`Duplicate configuration: "${line.text.trim()}"`,
+				// Show all error messages for this key in the same diagnostic
+				`${relevant_issues.map(issue => issue.error).join('\n')}`,
 				vscode.DiagnosticSeverity.Error
 			);
 			diagnostics.push(diagnostic);
